@@ -1,0 +1,553 @@
+:root {
+  color: #17202a;
+  background: #f6f7f3;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 56px;
+}
+
+.appHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 0 24px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #62705f;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  line-height: 0.95;
+}
+
+h2 {
+  font-size: 1.1rem;
+}
+
+.exports {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.exports a,
+button {
+  border: 1px solid #1f2c34;
+  border-radius: 8px;
+  background: #1f2c34;
+  color: white;
+  padding: 10px 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.exports a:nth-child(2) {
+  background: #506c64;
+  border-color: #506c64;
+}
+
+.exports a:nth-child(3) {
+  background: #8b4d35;
+  border-color: #8b4d35;
+}
+
+.clearButton {
+  background: transparent;
+  border-color: #d7b4ad;
+  color: #9d382f;
+}
+
+button:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.exportReminder {
+  margin: -10px 0 22px;
+  color: #657368;
+  font-weight: 700;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #d7dbd2;
+  border-bottom: 1px solid #d7dbd2;
+  margin-bottom: 24px;
+}
+
+.dashboard > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 18px 0;
+}
+
+.metric {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #2f675f;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 20px;
+}
+
+.uploadPanel,
+.weekPanel,
+.tableWrap {
+  border: 1px solid #d7dbd2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.uploadPanel,
+.weekPanel {
+  padding: 20px;
+}
+
+.uploadPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.helpBox {
+  border: 1px solid #d7dbd2;
+  border-radius: 8px;
+  background: #f8faf6;
+  padding: 14px;
+}
+
+.helpBox h2 {
+  margin-bottom: 8px;
+}
+
+.helpBox ol {
+  margin: 0;
+  padding-left: 22px;
+  color: #4d5b54;
+}
+
+.helpBox li + li {
+  margin-top: 4px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dayButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dayButtons button {
+  background: #eef3eb;
+  border-color: #cbd2c7;
+  color: #33433b;
+  padding: 8px 10px;
+}
+
+.dayButtons .selectedDay {
+  background: #2f675f;
+  border-color: #2f675f;
+  color: white;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: #4d5b54;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #cbd2c7;
+  border-radius: 6px;
+  background: #fbfcfa;
+  color: #17202a;
+  font: inherit;
+  font-weight: 500;
+  padding: 10px 11px;
+}
+
+textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.fileDrop {
+  border: 1px dashed #8fa198;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8faf6;
+}
+
+.fileDrop input {
+  border: 0;
+  padding: 0;
+}
+
+.fileList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fileList span {
+  border: 1px solid #d7dbd2;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #506c64;
+  font-size: 0.84rem;
+}
+
+.message,
+.empty {
+  margin: 0;
+  color: #657368;
+}
+
+.statusMessage,
+.warningMessage {
+  margin: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
+.statusMessage {
+  background: #eef7f2;
+  color: #2f675f;
+}
+
+.warningMessage {
+  background: #fff7df;
+  color: #7a5218;
+}
+
+.weekPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.weekItem {
+  display: grid;
+  gap: 4px;
+  border-left: 4px solid #2f675f;
+  padding: 8px 0 8px 12px;
+}
+
+.weekItem span {
+  color: #6c766e;
+  font-size: 0.9rem;
+}
+
+.taskHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 30px 0 14px;
+}
+
+.taskHeader > div {
+  display: grid;
+  gap: 10px;
+}
+
+.taskHeader select {
+  max-width: 220px;
+}
+
+.viewTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viewTabs button,
+.calendarToolbar button {
+  background: #eef3eb;
+  border-color: #cbd2c7;
+  color: #33433b;
+}
+
+.viewTabs .activeTab {
+  background: #1f2c34;
+  border-color: #1f2c34;
+  color: white;
+}
+
+.taskList {
+  display: grid;
+  gap: 14px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+}
+
+th {
+  background: #eef3eb;
+  color: #4d5b54;
+  font-size: 0.78rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+th,
+td {
+  border-bottom: 1px solid #d7dbd2;
+  padding: 10px;
+  vertical-align: top;
+}
+
+tr.priority-high {
+  box-shadow: inset 5px 0 0 #b64031;
+}
+
+tr.priority-medium {
+  box-shadow: inset 5px 0 0 #c08b2c;
+}
+
+tr.priority-low {
+  box-shadow: inset 5px 0 0 #2f675f;
+}
+
+td textarea {
+  min-height: 78px;
+}
+
+.sourceTextarea {
+  background: #f4f7f1;
+}
+
+.delete {
+  background: transparent;
+  color: #9d382f;
+  border-color: #e3c5c1;
+}
+
+.calendarView {
+  display: grid;
+  gap: 14px;
+}
+
+.calendarToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calendarToolbar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.calendarLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: #4d5b54;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.calendarLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendarLegend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid #d7dbd2;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.calendarWeekday {
+  background: #eef3eb;
+  color: #4d5b54;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 10px;
+  text-transform: uppercase;
+}
+
+.calendarDay {
+  min-height: 132px;
+  border-top: 1px solid #d7dbd2;
+  border-right: 1px solid #d7dbd2;
+  padding: 8px;
+}
+
+.outsideMonth {
+  background: #f6f7f3;
+  color: #879087;
+}
+
+.dayNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+.calendarTasks {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.calendarTask {
+  width: 100%;
+  border: 1px solid #d7dbd2;
+  border-left-width: 5px;
+  border-radius: 6px;
+  background: #fbfcfa;
+  color: #17202a;
+  padding: 7px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.calendarTask span {
+  display: block;
+  color: #657368;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.calendarDetails {
+  border: 1px solid #d7dbd2;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+
+dt {
+  color: #4d5b54;
+  font-weight: 800;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  main {
+    width: min(100vw - 22px, 760px);
+    padding-top: 22px;
+  }
+
+  .appHeader,
+  .workspace,
+  .taskHeader,
+  .formRow {
+    display: grid;
+  }
+
+  .exports {
+    justify-content: flex-start;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .calendarGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendarWeekday {
+    display: none;
+  }
+
+  .calendarDay {
+    min-height: 96px;
+    border-right: 0;
+  }
+
+  .outsideMonth {
+    display: none;
+  }
+
+  dl {
+    grid-template-columns: 1fr;
+  }
+}
