@@ -3,8 +3,6 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 const STORAGE_KEY = "syllabus-planner-tasks-v1";
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const OPENAI_MODEL = import.meta.env.VITE_OPENAI_MODEL || "gpt-5.4-mini";
 const taskTypes = ["assignment", "reading", "quiz", "exam", "project", "presentation", "discussion_post", "reply", "study", "project_milestone", "other"];
 const priorities = ["low", "medium", "high"];
 const calendarTaskTypes = ["reading", "assignment", "discussion_post", "reply", "quiz", "exam", "project", "presentation", "other"];
@@ -321,111 +319,19 @@ function extractTasks(text, courseName, courseStartDate = "", meetingDays = "") 
   return sortTasks([...dated, ...generateStudyPlan(dated)]);
 }
 
-function getResponseText(payload) {
-  const primaryText = payload.output?.[0]?.content?.[0]?.text;
-  if (typeof primaryText === "string" && primaryText.trim()) {
-    return primaryText;
-  }
-
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text;
-  }
-
-  const contentItems = (payload.output || []).flatMap((item) => item.content || []);
-  const directText = contentItems.find((content) => typeof content.text === "string" && content.text.trim())?.text;
-  if (directText) return directText;
-
-  const nestedText = contentItems.find((content) => typeof content.text?.value === "string" && content.text.value.trim())?.text.value;
-  if (nestedText) return nestedText;
-
-  const parsedContent = contentItems.find((content) => content.parsed)?.parsed;
-  if (parsedContent) return JSON.stringify(parsedContent);
-
-  throw new Error("Could not find text in the OpenAI response.");
-}
-
-async function extractTasksWithOpenAI(text, courseName, courseStartDate = "", meetingDays = "") {
-  let response;
+async function extractTasksWithBackend(text, courseName, courseStartDate = "", meetingDays = "") {
+  let response = null;
   try {
-    response = await fetch("https://api.openai.com/v1/responses", {
+    response = await fetch("/api/parse-syllabus", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-      model: OPENAI_MODEL,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "syllabus_plan",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["courseName", "tasks"],
-            properties: {
-              courseName: { type: "string" },
-              tasks: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["title", "type", "dueDate", "suggestedStartDate", "priority", "notes", "sourceText"],
-                  properties: {
-                    title: { type: "string" },
-                    type: { type: "string", enum: ["assignment", "reading", "quiz", "exam", "project", "presentation", "discussion_post", "reply", "other"] },
-                    dueDate: { type: "string" },
-                    suggestedStartDate: { type: "string" },
-                    priority: { type: "string", enum: ["low", "medium", "high"] },
-                    notes: { type: "string" },
-                    sourceText: { type: "string" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      input: [
-        {
-          role: "system",
-          content:
-            "You extract course planning tasks from syllabi. Do not write, draft, solve, or complete student assignments. Only organize deadlines, readings, study dates, and project milestones. Return valid JSON only."
-        },
-        {
-          role: "user",
-          content: `Extract syllabus planning items from this text.
-
-Return exactly this JSON shape:
-{
-  "courseName": "string",
-  "tasks": [
-    {
-      "title": "string",
-      "type": "assignment|reading|quiz|exam|project|presentation|discussion_post|reply|other",
-      "dueDate": "YYYY-MM-DD or empty string",
-      "suggestedStartDate": "YYYY-MM-DD or empty string",
-      "priority": "low|medium|high",
-      "notes": "brief note for the student",
-      "sourceText": "short original syllabus excerpt that caused this task"
-    }
-  ]
-}
-
-Rules:
-- Include assignments, readings, quizzes, exams/tests, projects, discussion post due dates, reply due dates, weekly chapters/readings, and other dated coursework.
-- Every task must include sourceText from the syllabus so the student can verify accuracy.
-- Reading start dates should be 2 to 4 days before class or the related due date.
-- If items are listed only as Week 1, Week 2, Week 3, etc., keep the week label in title or sourceText. The app will calculate dates from course start date: ${courseStartDate || "(none provided)"}.
-- Class meeting days: ${meetingDays || "(none provided)"}. For readings or prep, prefer dates before the first meeting day of the week when possible.
-- Do not invent coursework beyond planning reminders.
-- Use the provided course name if it is present: ${courseName || "(none provided)"}
-
-Syllabus text:
-${text.slice(0, 50000)}`
-        }
-      ]
+        syllabusText: text,
+        courseName,
+        courseStartDate,
+        meetingDays
       })
     });
   } catch (error) {
@@ -433,19 +339,17 @@ ${text.slice(0, 50000)}`
     throw error;
   }
 
-  const payload = await response.json();
-  console.log("Raw OpenAI response:", payload);
+  const payload = await response.json().catch(() => ({}));
+  console.log("Syllabus parse backend response:", { status: response.status, ok: response.ok });
 
   if (!response.ok) {
-    const error = new Error(payload.error?.message || "OpenAI API request failed.");
+    const error = new Error(payload.error || "Syllabus parsing backend request failed.");
     error.isApiFailure = true;
     throw error;
   }
 
-  const responseText = getResponseText(payload);
-  const parsed = JSON.parse(responseText);
-  const parsedCourseName = parsed.courseName || courseName || "Imported course";
-  const extracted = (parsed.tasks || []).map((task) => normalizeOpenAITask(task, parsedCourseName));
+  const parsedCourseName = payload.courseName || courseName || "Imported course";
+  const extracted = (payload.tasks || []).map((task) => normalizeOpenAITask(task, parsedCourseName));
   const dated = applyWeeklyDates(extracted, courseStartDate, meetingDays);
   return sortTasks([...dated, ...generateStudyPlan(dated)]);
 }
@@ -570,18 +474,15 @@ function App() {
       let extracted = [];
       let nextParserStatus = "";
 
-      if (!OPENAI_API_KEY) {
+      try {
+        extracted = await extractTasksWithBackend(text, courseName, courseStartDate, meetingDays);
+        nextParserStatus = "AI extraction used successfully.";
+      } catch (error) {
+        if (!error.isApiFailure) throw error;
         extracted = extractTasks(text, courseName, courseStartDate, meetingDays);
-        nextParserStatus = "Local parsing used because no API key was found.";
-      } else {
-        try {
-          extracted = await extractTasksWithOpenAI(text, courseName, courseStartDate, meetingDays);
-          nextParserStatus = "AI extraction used successfully.";
-        } catch (error) {
-          if (!error.isApiFailure) throw error;
-          extracted = extractTasks(text, courseName, courseStartDate, meetingDays);
-          nextParserStatus = "AI extraction failed, so local fallback parsing was used.";
-        }
+        nextParserStatus = error.message.includes("OPENAI_API_KEY")
+          ? "Local parsing used because no API key was found."
+          : "AI extraction failed, so local fallback parsing was used.";
       }
 
       setTasks((current) => sortTasks([...extracted, ...current]));
