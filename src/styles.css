@@ -338,7 +338,7 @@ textarea {
 
 table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1480px;
   border-collapse: collapse;
 }
 
@@ -505,6 +505,13 @@ td textarea {
 .calendarTask em {
   display: block;
   font-style: normal;
+}
+
+.calendarTask small {
+  display: block;
+  color: #657368;
+  font-size: 0.7rem;
+  margin-top: 2px;
 }
 
 .calendarTask strong {

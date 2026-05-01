@@ -5,6 +5,7 @@ A React app with a small Vercel serverless route that turns pasted syllabus text
 ## Features
 
 - Paste syllabus text.
+- Import copied Blackboard calendar due-date text.
 - Extract dated assignments, readings, quizzes, exams, projects, discussion posts, replies, and weekly reading items with OpenAI through a serverless backend route.
 - Preserve the source syllabus excerpt for every item.
 - Generate study reminders for exams and milestone reminders for projects.
@@ -13,6 +14,7 @@ A React app with a small Vercel serverless route that turns pasted syllabus text
 - Edit every extracted field before exporting.
 - Switch between an editable List View and a monthly Calendar View.
 - Export CSV and `.ics` calendar files for Apple Calendar or Google Calendar import.
+- CSV and calendar exports include imported Blackboard status, source, course code, due date, and due time where available.
 - Store tasks in browser `localStorage`.
 - Falls back to local date and keyword extraction when the backend route or OpenAI request fails.
 - Installs on Windows with normal Node.js. No SQLite, native modules, node-gyp, or Visual Studio Build Tools required.

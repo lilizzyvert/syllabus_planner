@@ -136,6 +136,29 @@ function sortTasks(tasks) {
   return [...tasks].sort((a, b) => (a.dueDate || a.suggestedStartDate || "9999").localeCompare(b.dueDate || b.suggestedStartDate || "9999"));
 }
 
+function parseBlackboardDate(value) {
+  const match = String(value || "").match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
+  if (!match) return "";
+  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+  return `${year}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
+}
+
+function parseBlackboardTime(value) {
+  const match = String(value || "").match(/\b\d{1,2}:\d{2}\s*[AP]M(?:\s*\([^)]+\))?/i);
+  return match ? match[0].trim() : "";
+}
+
+function parseBlackboardCourse(value) {
+  const parts = String(value || "").split(/[∙·]/);
+  const coursePart = parts[1]?.trim() || "";
+  const [courseCode = "", courseLabel = ""] = coursePart.split(":").map((part) => part.trim());
+  const courseName = courseLabel.includes(" - ")
+    ? courseLabel.split(" - ").slice(1).join(" - ").trim()
+    : courseLabel || courseCode;
+
+  return { courseCode, courseName };
+}
+
 function isCompleted(task) {
   return task.status === "completed";
 }
@@ -194,15 +217,18 @@ function normalizeTask(line, courseName, courseStartDate = "", meetingDays = "")
   return {
     id: makeId(),
     courseName: courseName || "Imported course",
+    courseCode: "",
     title,
     type,
     dueDate: dueDate || calculatedDate,
+    dueTime: "",
     suggestedStartDate: dueDate ? addDays(dueDate, type === "reading" ? -3 : -2) : suggestedStartForWeeklyTask(type, calculatedDate, firstMeetingDate),
     priority: priorityFor(type, title),
     notes: weekNumber && calculatedDate
       ? `Week ${weekNumber} date calculated from the course start date. Please verify before exporting.`
       : "Extracted locally from pasted syllabus text. Please verify before exporting.",
     sourceText: line,
+    source: "Syllabus",
     status: "planned",
     createdAt: new Date().toISOString()
   };
@@ -239,6 +265,7 @@ function applyWeeklyDates(tasks, courseStartDate, meetingDays) {
 function normalizeOpenAITask(task, courseName) {
   const incomingType = task.type === "discussion" ? "discussion_post" : task.type;
   const dueDate = task.dueDate || task.due_date || "";
+  const dueTime = task.dueTime || task.due_time || "";
   const title = task.title || task.taskTitle || task.task_title || "Untitled syllabus item";
   const sourceText = task.sourceText || task.source_text || task.source || "Source excerpt unavailable. Please verify against the syllabus.";
   const inferredWeeklyType = detectType(`${title} ${sourceText}`);
@@ -246,13 +273,16 @@ function normalizeOpenAITask(task, courseName) {
   return {
     id: makeId(),
     courseName: task.courseName || task.course_name || courseName || "Imported course",
+    courseCode: task.courseCode || task.course_code || "",
     title,
     type,
     dueDate,
+    dueTime,
     suggestedStartDate: task.suggestedStartDate || task.suggested_start_date || (dueDate ? addDays(dueDate, type === "reading" ? -3 : -2) : ""),
     priority: task.priority || priorityFor(type, title),
     notes: task.notes || "",
     sourceText,
+    source: task.source || "Syllabus",
     status: "planned",
     createdAt: new Date().toISOString()
   };
@@ -323,6 +353,50 @@ function extractTasks(text, courseName, courseStartDate = "", meetingDays = "") 
   return sortTasks([...dated, ...generateStudyPlan(dated)]);
 }
 
+function extractBlackboardTasks(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const tasks = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const dueMatch = line.match(/^Due date\s*(\d+)\s*:\s*(.+)$/i);
+    if (!dueMatch) continue;
+
+    const dueNumber = dueMatch[1];
+    const details = dueMatch[2];
+    const previousTitle = [...lines]
+      .slice(0, index)
+      .reverse()
+      .find((candidate) => !/^Today\b/i.test(candidate) && !/^Due date\s*\d+\s*:/i.test(candidate)) || "";
+    const { courseCode, courseName } = parseBlackboardCourse(details);
+    const type = dueNumber === "1" ? "discussion_post" : dueNumber === "2" ? "reply" : "assignment";
+    const fallbackTitle = type === "discussion_post" ? "Discussion post" : type === "reply" ? "Reply due" : `Due date ${dueNumber}`;
+
+    tasks.push({
+      id: makeId(),
+      courseName: courseName || courseCode || "Blackboard course",
+      courseCode,
+      title: previousTitle || fallbackTitle,
+      type,
+      dueDate: parseBlackboardDate(details),
+      dueTime: parseBlackboardTime(details),
+      suggestedStartDate: "",
+      priority: type === "reply" ? "medium" : "high",
+      notes: `Imported from Blackboard Calendar. Due date ${dueNumber}.`,
+      sourceText: previousTitle ? `${previousTitle}\n${line}` : line,
+      source: "Blackboard Calendar",
+      status: "planned",
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  return sortTasks(tasks);
+}
+
 async function extractTasksWithBackend(text, courseName, courseStartDate = "", meetingDays = "") {
   let response = null;
   try {
@@ -371,7 +445,7 @@ function downloadFile(filename, mimeType, content) {
 }
 
 function exportCsv(tasks) {
-  const headers = ["courseName", "title", "type", "dueDate", "suggestedStartDate", "priority", "status", "notes", "sourceText"];
+  const headers = ["courseName", "courseCode", "title", "type", "dueDate", "dueTime", "suggestedStartDate", "priority", "status", "source", "notes", "sourceText"];
   const escape = (value) => `"${String(value || "").replaceAll('"', '""')}"`;
   const csv = [headers.join(","), ...sortTasks(tasks).map((task) => headers.map((header) => escape(task[header])).join(","))].join("\n");
   downloadFile("syllabus-planner.csv", "text/csv;charset=utf-8", csv);
@@ -379,6 +453,25 @@ function exportCsv(tasks) {
 
 function icsDate(dateString) {
   return dateString.replaceAll("-", "");
+}
+
+function icsDateTime(dateString, timeString) {
+  const timeMatch = String(timeString || "").match(/(\d{1,2}):(\d{2})\s*([AP]M)/i);
+  if (!dateString || !timeMatch) return "";
+  let hours = Number(timeMatch[1]);
+  const minutes = timeMatch[2];
+  const meridiem = timeMatch[3].toUpperCase();
+  if (meridiem === "PM" && hours !== 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+  return `${icsDate(dateString)}T${String(hours).padStart(2, "0")}${minutes}00`;
+}
+
+function addMinutesToIcsDateTime(dateTimeString, minutesToAdd) {
+  const match = dateTimeString.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+  if (!match) return dateTimeString;
+  const date = new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}`);
+  date.setMinutes(date.getMinutes() + minutesToAdd);
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}${String(date.getSeconds()).padStart(2, "0")}`;
 }
 
 function escapeIcs(value) {
@@ -395,14 +488,15 @@ function exportIcs(tasks) {
     const date = task.dueDate || task.suggestedStartDate;
     if (!date) continue;
     const endDate = addDays(date, 1);
+    const startDateTime = icsDateTime(date, task.dueTime);
     lines.push(
       "BEGIN:VEVENT",
       `UID:${task.id}@syllabus-planner`,
       `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`,
-      `DTSTART;VALUE=DATE:${icsDate(date)}`,
-      `DTEND;VALUE=DATE:${icsDate(endDate)}`,
+      startDateTime ? `DTSTART:${startDateTime}` : `DTSTART;VALUE=DATE:${icsDate(date)}`,
+      startDateTime ? `DTEND:${addMinutesToIcsDateTime(startDateTime, 30)}` : `DTEND;VALUE=DATE:${icsDate(endDate)}`,
       `SUMMARY:${escapeIcs(`${task.courseName}: ${task.title}`)}`,
-      `DESCRIPTION:${escapeIcs(`${formatType(task.type)} | Priority: ${task.priority} | Status: ${task.status || "planned"}\n\n${task.notes}\n\nSource: ${task.sourceText}`)}`,
+      `DESCRIPTION:${escapeIcs(`${formatType(task.type)} | Priority: ${task.priority} | Status: ${task.status || "planned"}${task.dueTime ? ` | Due time: ${task.dueTime}` : ""}\n\n${task.notes}\n\nSource: ${task.source || "Syllabus"}\n${task.sourceText}`)}`,
       "END:VEVENT"
     );
   }
@@ -413,6 +507,7 @@ function exportIcs(tasks) {
 function App() {
   const [tasks, setTasks] = useState([]);
   const [text, setText] = useState("");
+  const [importMode, setImportMode] = useState("syllabus");
   const [courseName, setCourseName] = useState("");
   const [courseStartDate, setCourseStartDate] = useState("");
   const [meetingDays, setMeetingDays] = useState("");
@@ -438,7 +533,7 @@ function App() {
     return sortTasks(statusFiltered);
   }, [tasks, filter, statusFilter]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
-  const liveWeeklyWarning = hasWeeklyLabels(text) && !courseStartDate
+  const liveWeeklyWarning = importMode === "syllabus" && hasWeeklyLabels(text) && !courseStartDate
     ? "This syllabus uses weekly labels. Add a course start date so the app can calculate real dates."
     : "";
   const tasksByDate = useMemo(() => {
@@ -453,7 +548,7 @@ function App() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     try {
-      setTasks(JSON.parse(saved).map((task) => ({ status: "planned", ...task })));
+      setTasks(JSON.parse(saved).map((task) => ({ status: "planned", source: "Syllabus", dueTime: "", courseCode: "", ...task })));
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -466,7 +561,7 @@ function App() {
   async function parseSyllabus(event) {
     event.preventDefault();
     setLoading(true);
-    setMessage("Extracting dates and planning study tasks...");
+    setMessage(importMode === "blackboard" ? "Importing Blackboard due dates..." : "Extracting dates and planning study tasks...");
     setParserStatus("");
     setWeeklyWarning("");
 
@@ -476,7 +571,7 @@ function App() {
       return;
     }
 
-    const shouldWarnAboutWeeklyLabels = hasWeeklyLabels(text) && !courseStartDate;
+    const shouldWarnAboutWeeklyLabels = importMode === "syllabus" && hasWeeklyLabels(text) && !courseStartDate;
     if (shouldWarnAboutWeeklyLabels) {
       setWeeklyWarning("This syllabus uses weekly labels. Add a course start date so the app can calculate real dates.");
     }
@@ -485,15 +580,20 @@ function App() {
       let extracted = [];
       let nextParserStatus = "";
 
-      try {
-        extracted = await extractTasksWithBackend(text, courseName, courseStartDate, meetingDays);
-        nextParserStatus = "AI extraction used successfully.";
-      } catch (error) {
-        if (!error.isApiFailure) throw error;
-        extracted = extractTasks(text, courseName, courseStartDate, meetingDays);
-        nextParserStatus = error.message.includes("OPENAI_API_KEY")
-          ? "Local parsing used because no API key was found."
-          : "AI extraction failed, so local fallback parsing was used.";
+      if (importMode === "blackboard") {
+        extracted = extractBlackboardTasks(text);
+        nextParserStatus = "Blackboard due dates imported.";
+      } else {
+        try {
+          extracted = await extractTasksWithBackend(text, courseName, courseStartDate, meetingDays);
+          nextParserStatus = "AI extraction used successfully.";
+        } catch (error) {
+          if (!error.isApiFailure) throw error;
+          extracted = extractTasks(text, courseName, courseStartDate, meetingDays);
+          nextParserStatus = error.message.includes("OPENAI_API_KEY")
+            ? "Local parsing used because no API key was found."
+            : "AI extraction failed, so local fallback parsing was used.";
+        }
       }
 
       setTasks((current) => sortTasks([...extracted, ...current]));
@@ -566,23 +666,31 @@ function App() {
 
       <section className="workspace">
         <form className="uploadPanel" onSubmit={parseSyllabus}>
-          <h2>Add syllabus text</h2>
+          <h2>{importMode === "blackboard" ? "Add Blackboard due dates" : "Add syllabus text"}</h2>
           <section className="helpBox" aria-label="How to use this planner">
             <h2>How to use this planner</h2>
             <ol>
-              <li>Enter the course name.</li>
+              <li>Choose Syllabus or Blackboard Due Dates.</li>
+              <li>Enter the course name for syllabi.</li>
               <li>Add the course start date if the syllabus uses Week 1, Week 2, etc.</li>
-              <li>Paste the syllabus schedule or assignment section.</li>
+              <li>Paste the syllabus schedule, assignment section, or Blackboard calendar text.</li>
               <li>Click Extract dates.</li>
               <li>Review and edit the dates.</li>
               <li>Export to CSV, Apple Calendar, or Google Calendar.</li>
             </ol>
           </section>
           <label>
+            Import mode
+            <select value={importMode} onChange={(event) => setImportMode(event.target.value)}>
+              <option value="syllabus">Syllabus</option>
+              <option value="blackboard">Blackboard Due Dates</option>
+            </select>
+          </label>
+          <label>
             Course name
             <input value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="BIO 101, History Seminar..." />
           </label>
-          <div className="formRow">
+          {importMode === "syllabus" && <div className="formRow">
             <label>
               Course start date
               <input type="date" value={courseStartDate} onChange={(event) => setCourseStartDate(event.target.value)} />
@@ -591,8 +699,8 @@ function App() {
               Meeting days
               <input value={meetingDays} onChange={(event) => setMeetingDays(event.target.value)} placeholder="Monday, Wednesday" />
             </label>
-          </div>
-          <div className="dayButtons" aria-label="Common meeting days">
+          </div>}
+          {importMode === "syllabus" && <div className="dayButtons" aria-label="Common meeting days">
             {meetingDayOptions.map((day) => (
               <button
                 type="button"
@@ -608,13 +716,15 @@ function App() {
                 {day.slice(0, 3)}
               </button>
             ))}
-          </div>
+          </div>}
           <label>
-            Pasted syllabus text
+            {importMode === "blackboard" ? "Pasted Blackboard calendar text" : "Pasted syllabus text"}
             <textarea
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder={`Paste schedule or assignment sections here, for example:\n\nWeek 1: Introduction, discussion forum\nWeek 2: Chapter 1 reading, Paper #1\nWeek 10: Proposal due\nFinal Exam Week: Final assessment`}
+              placeholder={importMode === "blackboard"
+                ? `Paste copied Blackboard calendar text here, for example:\n\nToday - May 1, 2026\nWeek 1 - Discussion\nDue date 1: 5/1/26, 5:00 PM (EDT) ∙ 26SP-IT373-45: 26SP-IT373-45 - Network Security`
+                : `Paste schedule or assignment sections here, for example:\n\nWeek 1: Introduction, discussion forum\nWeek 2: Chapter 1 reading, Paper #1\nWeek 10: Proposal due\nFinal Exam Week: Final assessment`}
             />
           </label>
           <button disabled={loading}>{loading ? "Extracting..." : "Extract dates"}</button>
@@ -629,7 +739,7 @@ function App() {
           {thisWeek.map((task) => (
             <div className="weekItem" key={task.id}>
               <strong>{task.title}</strong>
-              <span>{task.courseName} / {task.dueDate || task.suggestedStartDate}</span>
+              <span>{task.courseName} / {task.dueDate || task.suggestedStartDate}{task.dueTime ? ` / ${task.dueTime}` : ""}</span>
             </div>
           ))}
         </aside>
@@ -668,11 +778,14 @@ function App() {
                 <tr>
                   <th>Done</th>
                   <th>Course</th>
+                  <th>Course code</th>
                   <th>Title</th>
                   <th>Type</th>
                   <th>Due</th>
+                  <th>Time</th>
                   <th>Start</th>
                   <th>Priority</th>
+                  <th>Source</th>
                   <th>Notes</th>
                   <th>Source text</th>
                   <th></th>
@@ -691,6 +804,7 @@ function App() {
                       />
                     </td>
                     <td><input value={task.courseName} onChange={(event) => updateTask(task.id, { courseName: event.target.value })} /></td>
+                    <td><input value={task.courseCode || ""} onChange={(event) => updateTask(task.id, { courseCode: event.target.value })} /></td>
                     <td><input className="titleInput" value={task.title} onChange={(event) => updateTask(task.id, { title: event.target.value })} /></td>
                     <td>
                       <select value={task.type} onChange={(event) => updateTask(task.id, { type: event.target.value })}>
@@ -698,12 +812,14 @@ function App() {
                       </select>
                     </td>
                     <td><input type="date" value={task.dueDate} onChange={(event) => updateTask(task.id, { dueDate: event.target.value })} /></td>
+                    <td><input value={task.dueTime || ""} onChange={(event) => updateTask(task.id, { dueTime: event.target.value })} placeholder="5:00 PM (EDT)" /></td>
                     <td><input type="date" value={task.suggestedStartDate} onChange={(event) => updateTask(task.id, { suggestedStartDate: event.target.value })} /></td>
                     <td>
                       <select value={task.priority} onChange={(event) => updateTask(task.id, { priority: event.target.value })}>
                         {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
                       </select>
                     </td>
+                    <td><input value={task.source || "Syllabus"} onChange={(event) => updateTask(task.id, { source: event.target.value })} /></td>
                     <td><textarea value={task.notes} onChange={(event) => updateTask(task.id, { notes: event.target.value })} /></td>
                     <td><textarea className="sourceTextarea" value={task.sourceText} onChange={(event) => updateTask(task.id, { sourceText: event.target.value })} /></td>
                     <td><button className="delete" onClick={() => removeTask(task.id)}>Remove</button></td>
@@ -752,6 +868,7 @@ function App() {
                       <span>{formatType(task.type)}</span>
                       {isCompleted(task) && <strong>Completed</strong>}
                       <em>{task.title}</em>
+                      {task.dueTime && <small>{task.dueTime}</small>}
                     </button>
                   ))}
                 </div>
@@ -770,16 +887,22 @@ function App() {
                 <dl>
                   <dt>Course</dt>
                   <dd>{selectedCalendarTask.courseName}</dd>
+                  <dt>Course code</dt>
+                  <dd>{selectedCalendarTask.courseCode || "Not set"}</dd>
                   <dt>Type</dt>
                   <dd>{formatType(selectedCalendarTask.type)}</dd>
                   <dt>Due date</dt>
                   <dd>{selectedCalendarTask.dueDate || "Not set"}</dd>
+                  <dt>Due time</dt>
+                  <dd>{selectedCalendarTask.dueTime || "Not set"}</dd>
                   <dt>Suggested start date</dt>
                   <dd>{selectedCalendarTask.suggestedStartDate || "Not set"}</dd>
                   <dt>Priority</dt>
                   <dd>{selectedCalendarTask.priority}</dd>
                   <dt>Status</dt>
                   <dd>{isCompleted(selectedCalendarTask) ? "completed" : "planned"}</dd>
+                  <dt>Source</dt>
+                  <dd>{selectedCalendarTask.source || "Syllabus"}</dd>
                   <dt>Notes</dt>
                   <dd>{selectedCalendarTask.notes || "No notes"}</dd>
                   <dt>Source text</dt>
