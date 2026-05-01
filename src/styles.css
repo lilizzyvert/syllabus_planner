@@ -97,7 +97,7 @@ button:disabled {
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   border-top: 1px solid #d7dbd2;
   border-bottom: 1px solid #d7dbd2;
   margin-bottom: 24px;
@@ -297,6 +297,17 @@ textarea {
   max-width: 220px;
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filters select {
+  max-width: 190px;
+}
+
 .viewTabs {
   display: flex;
   flex-wrap: wrap;
@@ -356,6 +367,20 @@ tr.priority-medium {
 
 tr.priority-low {
   box-shadow: inset 5px 0 0 #2f675f;
+}
+
+.completedTask {
+  opacity: 0.58;
+}
+
+.completedTask .titleInput {
+  text-decoration: line-through;
+}
+
+.taskCheckbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #2f675f;
 }
 
 td textarea {
@@ -475,6 +500,27 @@ td textarea {
   color: #657368;
   font-size: 0.68rem;
   text-transform: uppercase;
+}
+
+.calendarTask em {
+  display: block;
+  font-style: normal;
+}
+
+.calendarTask strong {
+  display: inline-block;
+  margin: 3px 0;
+  color: #2f675f;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.completedCalendarTask {
+  opacity: 0.58;
+}
+
+.completedCalendarTask em {
+  text-decoration: line-through;
 }
 
 .calendarDetails {

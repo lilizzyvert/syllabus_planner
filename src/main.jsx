@@ -136,6 +136,10 @@ function sortTasks(tasks) {
   return [...tasks].sort((a, b) => (a.dueDate || a.suggestedStartDate || "9999").localeCompare(b.dueDate || b.suggestedStartDate || "9999"));
 }
 
+function isCompleted(task) {
+  return task.status === "completed";
+}
+
 function priorityFor(type, title = "") {
   const value = `${type} ${title}`.toLowerCase();
   if (value.includes("exam") || value.includes("test") || value.includes("final") || value.includes("project")) return "high";
@@ -367,7 +371,7 @@ function downloadFile(filename, mimeType, content) {
 }
 
 function exportCsv(tasks) {
-  const headers = ["courseName", "title", "type", "dueDate", "suggestedStartDate", "priority", "notes", "sourceText"];
+  const headers = ["courseName", "title", "type", "dueDate", "suggestedStartDate", "priority", "status", "notes", "sourceText"];
   const escape = (value) => `"${String(value || "").replaceAll('"', '""')}"`;
   const csv = [headers.join(","), ...sortTasks(tasks).map((task) => headers.map((header) => escape(task[header])).join(","))].join("\n");
   downloadFile("syllabus-planner.csv", "text/csv;charset=utf-8", csv);
@@ -398,7 +402,7 @@ function exportIcs(tasks) {
       `DTSTART;VALUE=DATE:${icsDate(date)}`,
       `DTEND;VALUE=DATE:${icsDate(endDate)}`,
       `SUMMARY:${escapeIcs(`${task.courseName}: ${task.title}`)}`,
-      `DESCRIPTION:${escapeIcs(`${formatType(task.type)} | Priority: ${task.priority}\n\n${task.notes}\n\nSource: ${task.sourceText}`)}`,
+      `DESCRIPTION:${escapeIcs(`${formatType(task.type)} | Priority: ${task.priority} | Status: ${task.status || "planned"}\n\n${task.notes}\n\nSource: ${task.sourceText}`)}`,
       "END:VEVENT"
     );
   }
@@ -417,15 +421,22 @@ function App() {
   const [parserStatus, setParserStatus] = useState("");
   const [weeklyWarning, setWeeklyWarning] = useState("");
   const [filter, setFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [viewMode, setViewMode] = useState("list");
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [selectedCalendarTask, setSelectedCalendarTask] = useState(null);
 
   const thisWeek = useMemo(() => sortTasks(tasks).filter((task) => dateInWeek(task.dueDate || task.suggestedStartDate)), [tasks]);
+  const completedCount = useMemo(() => tasks.filter(isCompleted).length, [tasks]);
   const visibleTasks = useMemo(() => {
-    const filtered = filter === "all" ? tasks : tasks.filter((task) => task.type === filter);
-    return sortTasks(filtered);
-  }, [tasks, filter]);
+    const typeFiltered = filter === "all" ? tasks : tasks.filter((task) => task.type === filter);
+    const statusFiltered = typeFiltered.filter((task) => {
+      if (statusFilter === "active") return !isCompleted(task);
+      if (statusFilter === "completed") return isCompleted(task);
+      return true;
+    });
+    return sortTasks(statusFiltered);
+  }, [tasks, filter, statusFilter]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const liveWeeklyWarning = hasWeeklyLabels(text) && !courseStartDate
     ? "This syllabus uses weekly labels. Add a course start date so the app can calculate real dates."
@@ -442,7 +453,7 @@ function App() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     try {
-      setTasks(JSON.parse(saved));
+      setTasks(JSON.parse(saved).map((task) => ({ status: "planned", ...task })));
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -498,6 +509,9 @@ function App() {
 
   function updateTask(id, patch) {
     setTasks((current) => current.map((task) => (task.id === id ? { ...task, ...patch } : task)));
+    if (selectedCalendarTask?.id === id) {
+      setSelectedCalendarTask((task) => ({ ...task, ...patch }));
+    }
   }
 
   function removeTask(id) {
@@ -543,6 +557,10 @@ function App() {
         <div>
           <span className="metric">{tasks.filter((task) => task.priority === "high").length}</span>
           <span>High priority</span>
+        </div>
+        <div>
+          <span className="metric">{completedCount}</span>
+          <span>Completed</span>
         </div>
       </section>
 
@@ -626,10 +644,17 @@ function App() {
           </div>
         </div>
         {viewMode === "list" && (
-          <select value={filter} onChange={(event) => setFilter(event.target.value)}>
-            <option value="all">All types</option>
-            {taskTypes.map((type) => <option key={type} value={type}>{formatType(type)}</option>)}
-          </select>
+          <div className="filters">
+            <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+              <option value="all">All types</option>
+              {taskTypes.map((type) => <option key={type} value={type}>{formatType(type)}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">All tasks</option>
+              <option value="active">Active tasks</option>
+              <option value="completed">Completed tasks</option>
+            </select>
+          </div>
         )}
       </section>
 
@@ -641,6 +666,7 @@ function App() {
             <table>
               <thead>
                 <tr>
+                  <th>Done</th>
                   <th>Course</th>
                   <th>Title</th>
                   <th>Type</th>
@@ -654,9 +680,18 @@ function App() {
               </thead>
               <tbody>
                 {visibleTasks.map((task) => (
-                  <tr className={`priority-${task.priority}`} key={task.id}>
+                  <tr className={`priority-${task.priority} ${isCompleted(task) ? "completedTask" : ""}`} key={task.id}>
+                    <td>
+                      <input
+                        className="taskCheckbox"
+                        type="checkbox"
+                        checked={isCompleted(task)}
+                        onChange={(event) => updateTask(task.id, { status: event.target.checked ? "completed" : "planned" })}
+                        aria-label={`Mark ${task.title} as completed`}
+                      />
+                    </td>
                     <td><input value={task.courseName} onChange={(event) => updateTask(task.id, { courseName: event.target.value })} /></td>
-                    <td><input value={task.title} onChange={(event) => updateTask(task.id, { title: event.target.value })} /></td>
+                    <td><input className="titleInput" value={task.title} onChange={(event) => updateTask(task.id, { title: event.target.value })} /></td>
                     <td>
                       <select value={task.type} onChange={(event) => updateTask(task.id, { type: event.target.value })}>
                         {taskTypes.map((type) => <option key={type} value={type}>{formatType(type)}</option>)}
@@ -709,13 +744,14 @@ function App() {
                   {(tasksByDate[day.key] || []).map((task) => (
                     <button
                       type="button"
-                      className="calendarTask"
+                      className={`calendarTask ${isCompleted(task) ? "completedCalendarTask" : ""}`}
                       style={{ borderLeftColor: taskTypeColors[task.type] || taskTypeColors.other }}
                       key={task.id}
                       onClick={() => setSelectedCalendarTask(task)}
                     >
                       <span>{formatType(task.type)}</span>
-                      {task.title}
+                      {isCompleted(task) && <strong>Completed</strong>}
+                      <em>{task.title}</em>
                     </button>
                   ))}
                 </div>
@@ -742,6 +778,8 @@ function App() {
                   <dd>{selectedCalendarTask.suggestedStartDate || "Not set"}</dd>
                   <dt>Priority</dt>
                   <dd>{selectedCalendarTask.priority}</dd>
+                  <dt>Status</dt>
+                  <dd>{isCompleted(selectedCalendarTask) ? "completed" : "planned"}</dd>
                   <dt>Notes</dt>
                   <dd>{selectedCalendarTask.notes || "No notes"}</dd>
                   <dt>Source text</dt>
